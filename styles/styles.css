@@ -1,0 +1,244 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary-blue: #007bff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --text-dark: #1a1a1a;
+  --text-muted: #6c757d;
+  --bg-gradient-start: #f8f9fa;
+  --bg-gradient-end: #e9ecef;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  color: var(--text-dark);
+  background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+  background-size: 400% 400%;
+  animation: gradientBG 15s ease infinite;
+  min-height: 100vh;
+}
+
+@keyframes gradientBG {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.navbar-brand {
+  font-weight: bold !important;
+  color: #007bff !important;
+  font-size: 1.5rem;
+}
+
+.nav-link:hover {
+  color: #0056b3 !important;
+}
+
+.dropdown-menu .dropdown-item:hover {
+  background-color: #f8f9fa !important;
+  color: #007bff !important;
+}
+
+.profile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #007bff;
+  color: white;
+  transition: background-color 0.3s ease;
+}
+
+.nav-link:hover .profile-icon {
+  background-color: #0056b3;
+}
+
+.card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  border-radius: 16px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.15);
+}
+
+.favorite-icon {
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.favorite-icon.active {
+  color: #dc3545;
+}
+
+@keyframes heartPulse {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.35);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.heart-pulse-active {
+  animation: heartPulse 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.song-item,
+.playlist-item {
+  transition: transform 0.2s ease, background-color 0.2s ease;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid transparent;
+  animation: fadeInUp 0.5s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.song-item,
+.playlist-item {
+  transition: transform 0.3s ease, background-color 0.3s ease;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.song-item:hover,
+.playlist-item:hover {
+  transform: translateY(-2px);
+  background-color: #f1f3f5;
+}
+
+.custom-range {
+  width: 100%;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+#audio-player {
+  border-radius: 20px;
+  background-color: #f1f3f5;
+}
+
+#play-pause-btn,
+#favorite-btn,
+#add-to-playlist-btn {
+  transition: transform 0.2s ease;
+}
+
+#play-pause-btn:hover,
+#favorite-btn:hover,
+#add-to-playlist-btn:hover {
+  transform: scale(1.1);
+}
+
+.btn-outline-secondary {
+  border-color: #007bff;
+  color: #007bff;
+}
+
+.btn-outline-secondary:hover {
+  background-color: #007bff;
+  color: white;
+}
+
+#search-input {
+  border-radius: 20px;
+  border: 2px solid #007bff;
+}
+
+#search-btn {
+  border-radius: 20px;
+  background-color: #007bff;
+  border: none;
+  transition: background-color 0.3s ease;
+}
+
+#search-btn:hover {
+  background-color: #0056b3;
+}
+
+.nav-tabs .nav-link {
+  color: #495057;
+}
+
+.nav-tabs .nav-link.active {
+  color: #007bff;
+  border-color: #007bff;
+}
+
+footer {
+  background-color: #007bff !important;
+  color: white;
+}
+
+footer p {
+  margin: 0;
+  font-weight: bold;
+}
+
+#search-results {
+  margin-top: 10px;
+}
+
+#search-results .song-item {
+  margin-bottom: 10px;
+}
+
+.active-song {
+  background-color: #f0f7ff;
+  border-left: 4px solid #007bff;
+  box-shadow: inset 0 0 15px rgba(0, 123, 255, 0.1);
+}
+
+.song-item img {
+  object-fit: cover;
+}

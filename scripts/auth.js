@@ -54,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sendOtpBtn) {
         sendOtpBtn.addEventListener('click', async () => {
             const inputVal = document.getElementById('auth-input').value;
+            const btn = sendOtpBtn;
+
             if (!inputVal) {
                 alert("Please enter a phone number or email.");
                 return;
@@ -64,10 +66,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // 1. Disable button and show loading
+            btn.disabled = true;
+            const originalText = btn.innerText;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Sending...`;
+
             const payload = { email: inputVal };
 
             try {
-                // Pointing to Node.js Backend (Port 5000)
                 const response = await fetch(`${API_URL}/auth/send-otp`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -77,15 +83,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
 
                 if (response.ok) {
+                    // Success logic
+                    alert("OTP sent! Please check your email inbox.");
                     document.getElementById('login-form-initial').style.display = 'none';
                     document.getElementById('otp-group').style.display = 'block';
-                    alert("OTP sent! Please check your email inbox.");
+
+                    // 2. Cooldown Timer (30s)
+                    let cooldown = 30;
+                    const timer = setInterval(() => {
+                        btn.innerText = `Resend in ${cooldown}s`;
+                        cooldown--;
+                        if (cooldown < 0) {
+                            clearInterval(timer);
+                            btn.disabled = false;
+                            btn.innerText = originalText;
+                        }
+                    }, 1000);
+
                 } else {
+                    // Fail logic
                     alert(data.error || "Failed to send OTP");
+                    btn.disabled = false;
+                    btn.innerText = originalText;
                 }
             } catch (error) {
                 console.error("Error sending OTP:", error);
                 alert("Error connecting to auth server.");
+                btn.disabled = false;
+                btn.innerText = originalText;
             }
         });
     }

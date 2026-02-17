@@ -9,6 +9,18 @@ const userId = localStorage.getItem('vibesync_user_id');
 // --- INITIALIZATION ---
 async function init() {
     try {
+        // Validation: Check if user exists before loading everything
+        if (userId && userId !== 'guest') {
+            const userCheck = await fetch(`${API_URL}/users/${userId}/recently-played`);
+            if (userCheck.status === 404) {
+                console.warn("User ID invalid or deleted. Logging out.");
+                localStorage.removeItem('vibesync_user_id');
+                localStorage.removeItem('vibesync_user_identifier');
+                window.location.href = 'index.html';
+                return;
+            }
+        }
+
         await Promise.all([
             fetchSongs(),
             fetchGenres(), // Was populateGenreFilters
@@ -20,7 +32,6 @@ async function init() {
         // Initial renders
         renderFavorites();
 
-        // Autoplay if playlist not empty
         // Autoplay if playlist not empty
         if (playlist.length > 0) {
             updateCurrentSong(playlist[0]);
@@ -219,9 +230,24 @@ function updateCurrentSong(song) {
 
 // --- FAVORITES ---
 async function fetchFavorites() {
-    if (!userId) return;
+    // Re-fetch ID to be safe
+    const currentUserId = localStorage.getItem('vibesync_user_id');
+    const container = document.getElementById('favorites-content');
+
+    if (!currentUserId || currentUserId === 'guest') {
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
+                    <p class="small mb-0">Login to view favorites</p>
+                </div>`;
+            lucide.createIcons();
+        }
+        return;
+    }
+
     try {
-        const res = await fetch(`${API_URL}/favorites/${userId}`);
+        const res = await fetch(`${API_URL}/favorites/${currentUserId}`);
         const favs = await res.json();
         // favs is array of IDs or Objects
         userFavorites = new Set(favs.map(f => typeof f === 'object' ? f._id : f));
@@ -313,10 +339,23 @@ function renderFavorites() {
 
 // --- PLAYLISTS ---
 async function fetchPlaylists() {
+    const currentUserId = localStorage.getItem('vibesync_user_id');
     const container = document.getElementById('playlists-content');
-    if (!userId) return;
-    if (userId === 'guest') {
-        if (container) container.innerHTML = '<div class="text-center text-muted p-3">Login to create playlists</div>';
+    const createBtn = document.getElementById('create-playlist-btn');
+
+    if (!currentUserId) return;
+
+    // GUEST LOGIC
+    if (currentUserId === 'guest') {
+        if (createBtn) createBtn.style.display = 'none'; // Hide Create Button
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
+                    <p class="small mb-0">Login to create playlists</p>
+                </div>`;
+            lucide.createIcons();
+        }
         return;
     }
 
@@ -324,8 +363,6 @@ async function fetchPlaylists() {
 
     try {
         const res = await fetch(`${API_URL}/playlists/${userId}`);
-        if (!res.ok) throw new Error("Failed to fetch");
-
         if (!res.ok) throw new Error("Failed to fetch");
 
         userPlaylists = await res.json();
@@ -692,25 +729,41 @@ function renderSearchResults(results, containerId) {
 
 async function populateRecommendations() {
     const userId = localStorage.getItem('vibesync_user_id') || 'guest';
-    if (userId === 'guest') return;
-
     const container = document.getElementById('recommendations');
+
+    if (userId === 'guest') {
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
+                    <p class="small mb-0">Login to view recommendations</p>
+                </div>`;
+            lucide.createIcons();
+        }
+        return;
+    }
+
     if (container) container.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
     try {
         const res = await fetch(`${API_URL}/recommendations/${userId}`);
         const recommendedSongs = await res.json();
 
-        const container = document.getElementById('recommendations');
         if (container) {
-            container.innerHTML = recommendedSongs.map(createSongItem).join('');
-            lucide.createIcons();
-
-            // SCOPED Listeners
-            attachSongPlayListeners(container, recommendedSongs);
+            if (recommendedSongs.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted p-2">No recommendations yet</div>';
+            } else {
+                container.innerHTML = recommendedSongs.map(createSongItem).join('');
+                lucide.createIcons();
+                // SCOPED Listeners
+                attachSongPlayListeners(container, recommendedSongs);
+            }
         }
 
-    } catch (e) { console.error("Recs Error", e); }
+    } catch (e) {
+        console.error("Recs Error", e);
+        if (container) container.innerHTML = '<div class="text-center text-danger p-2">Failed to load recommendations</div>';
+    }
 }
 
 async function addToRecentlyPlayed(song) {
@@ -740,9 +793,21 @@ async function addToRecentlyPlayed(song) {
 }
 
 async function fetchRecentlyPlayed() {
-    if (!userId) return;
-
+    const currentUserId = localStorage.getItem('vibesync_user_id');
     const container = document.getElementById('recently-played');
+
+    if (!currentUserId || currentUserId === 'guest') {
+        if (container) {
+            container.innerHTML = `
+                <div class="text-center text-muted p-4">
+                    <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
+                    <p class="small mb-0">Login to see history</p>
+                </div>`;
+            lucide.createIcons();
+        }
+        return;
+    }
+
     if (container) container.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
     try {
@@ -751,14 +816,20 @@ async function fetchRecentlyPlayed() {
         // Backend returns Populate objects, so they match song struct
         recentlyPlayedSongs = songs;
 
-        const container = document.getElementById('recently-played');
         if (container) {
-            container.innerHTML = recentlyPlayedSongs.map(createSongItem).join('');
-            lucide.createIcons();
-            // SCOPED Listeners
-            attachSongPlayListeners(container, recentlyPlayedSongs);
+            if (recentlyPlayedSongs.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted p-2">No history yet</div>';
+            } else {
+                container.innerHTML = recentlyPlayedSongs.map(createSongItem).join('');
+                lucide.createIcons();
+                // SCOPED Listeners
+                attachSongPlayListeners(container, recentlyPlayedSongs);
+            }
         }
-    } catch (e) { console.error("Fetch Recent Error", e); }
+    } catch (e) {
+        console.error("Fetch Recent Error", e);
+        if (container) container.innerHTML = '<div class="text-center text-danger p-2">Failed to load history</div>';
+    }
 }
 
 function renderRecommendations(recs) {

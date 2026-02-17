@@ -413,6 +413,7 @@
                 await fetch(`${API_URL}/admin/songs`, { method: 'POST', headers, body: JSON.stringify(payload) });
             }
 
+            const modalEl = document.getElementById('songModal');
             const modal = bootstrap.Modal.getInstance(modalEl);
             modal.hide();
             loadSongs();

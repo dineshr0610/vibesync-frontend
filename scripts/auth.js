@@ -61,7 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            if (!inputVal.includes('@')) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(inputVal)) {
                 alert("Please enter a valid email address.");
                 return;
             }

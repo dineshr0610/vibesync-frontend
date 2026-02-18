@@ -4,11 +4,12 @@ let recentlyPlayedSongs = [];
 let userFavorites = new Set(); // Store favorite song IDs
 let userPlaylists = [];
 
-const userId = localStorage.getItem('vibesync_user_id');
+const getUserId = () => localStorage.getItem('vibesync_user_id');
 
 // --- INITIALIZATION ---
 async function init() {
     try {
+        const userId = getUserId();
         // Validation: Check if user exists before loading everything
         if (userId && userId !== 'guest') {
             const userCheck = await fetch(`${API_URL}/users/${userId}/recently-played`);
@@ -41,6 +42,7 @@ async function init() {
         }
 
         setupEventListeners(); // Restore Event Listeners
+        lucide.createIcons();
     } catch (err) {
         console.error("Initialization error:", err);
     }
@@ -94,15 +96,13 @@ function renderSongs(songsToRender, context = 'all', playlistId = null) {
                 <i data-lucide="music" class="mb-3" style="width: 48px; height: 48px; opacity: 0.5;"></i>
                 <p>No songs found for this selection.</p>
             </div>`;
-        lucide.createIcons();
         return;
     }
 
     // Pass context and playlistId to createSongItem
     container.innerHTML = songsToRender.map(song => createSongItem(song, context, playlistId)).join('');
-    lucide.createIcons();
 
-    // SCROPED Listeners
+    // SCOPED Listeners
     attachSongPlayListeners(container, songsToRender);
 }
 
@@ -112,8 +112,8 @@ function createSongItem(song, context = 'all', playlistId = null) {
 
     if (context === 'playlist' && playlistId) {
         actionBtn = `
-            <button class="btn btn-sm btn-outline-danger me-2" onclick="removeSongFromPlaylist('${playlistId}', '${song._id}')" title="Remove from Playlist">
-                <i data-lucide="minus-circle"></i>
+            <button class="btn btn-sm btn-outline-danger" onclick="removeSongFromPlaylist('${playlistId}', '${song._id}')" title="Remove from Playlist">
+                <i data-lucide="minus-circle"></i> Remove
             </button>
         `;
     } else {
@@ -121,51 +121,63 @@ function createSongItem(song, context = 'all', playlistId = null) {
             `<li><a class="dropdown-item" href="#" onclick="addToPlaylist('${pl._id}', '${song._id}')">${pl.name}</a></li>`
         ).join('') || '<li><span class="dropdown-item text-muted">No Playlists</span></li>';
 
-        // Added data-song-id to the button
         actionBtn = `
-            <button class="btn btn-sm ${isFav ? 'text-danger' : 'text-secondary'} me-2 fav-btn" data-song-id="${song._id}" onclick="toggleFavorite('${song._id}', this)">
-                <i data-lucide="heart" class="${isFav ? 'fill-danger' : ''}"></i>
-            </button>
-            <div class="dropdown me-2">
-                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" title="Add to Playlist">
-                    <i data-lucide="plus"></i>
+            <div class="song-action-row d-flex gap-2">
+                <button class="btn btn-sm ${isFav ? 'text-danger' : 'text-secondary'} fav-btn" data-song-id="${song._id}" onclick="toggleFavorite('${song._id}', this)" title="Add to Favorites">
+                    <i data-lucide="heart" class="${isFav ? 'text-danger' : 'text-secondary'}"></i>
                 </button>
-                <ul class="dropdown-menu">
-                    ${playlistOptions}
-                </ul>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" title="Add to Playlist">
+                        <i data-lucide="plus"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        ${playlistOptions}
+                    </ul>
+                </div>
             </div>
         `;
     }
 
     return `
-        <div class="d-flex align-items-center mb-2 song-item p-2 hover-bg-light rounded">
-            <img src="${song.coverImage || '/placeholder.svg'}" class="me-3 rounded" width="50" height="50">
-            <div class="flex-grow-1">
-                <h5 class="mb-0 fs-6">${song.title}</h5>
-                <p class="text-muted mb-0 small">${song.artist}</p>
-                <span class="badge bg-secondary" style="font-size: 0.6rem;">${song.genre || 'Unknown'}</span>
+        <div class="song-item">
+            <img src="${song.coverImage || '/placeholder.svg'}" alt="${song.title}">
+            <div class="song-info">
+                <h5 class="mb-1">${song.title}</h5>
+                <p class="text-muted mb-2 small">${song.artist}</p>
+                <span class="badge bg-secondary">${song.genre || 'Unknown'}</span>
             </div>
-            ${actionBtn}
+            <div class="song-actions">
+                ${actionBtn}
+            </div>
             <button class="btn btn-sm btn-primary play-song" data-song-id="${song._id}">
-                <i data-lucide="play"></i>
+                <i data-lucide="play"></i> Play
             </button>
         </div>
     `;
 }
 
 // --- PLAYER ---
-function playSong(index) {
+async function playSong(index) {
     if (index < 0 || index >= playlist.length) return;
     currentSongIndex = index;
     const song = playlist[index];
 
     const audio = document.getElementById('audio-player');
-    audio.src = song.audioUrl;
-    audio.play().catch(e => console.log("Play error:", e));
+
+    // Race condition fix
+    try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = song.audioUrl;
+        await audio.play();
+    } catch (e) {
+        console.log("Play error (likely interrupted):", e);
+    }
 
     updateCurrentSong(song);
 
     // Sync to DB for AI
+    const userId = getUserId();
     if (userId && userId !== 'guest') {
         fetch(`${API_URL}/users/${userId}/recently-played`, {
             method: 'POST',
@@ -186,7 +198,20 @@ function updateCurrentSong(song) {
     // Fav Button in Player
     const favBtn = document.getElementById('favorite-btn');
     const isFav = userFavorites.has(song._id);
-    favBtn.innerHTML = `<i data-lucide="heart" class="${isFav ? 'text-danger fill-danger' : ''}"></i>`;
+
+    // Optimized: Toggle classes instead of rebuilding DOM
+    let icon = favBtn.querySelector('svg') || favBtn.querySelector('i');
+    if (!icon) {
+        favBtn.innerHTML = `<i data-lucide="heart"></i>`;
+        icon = favBtn.querySelector('i');
+    }
+
+    if (icon) {
+        // Clear old colors explicitly to be safe
+        icon.classList.remove('text-danger', 'text-secondary');
+        icon.classList.add(isFav ? 'text-danger' : 'text-secondary');
+    }
+
     favBtn.onclick = () => toggleFavorite(song._id, favBtn); // Bind click
 
     // Add to Playlist Dropdown logic
@@ -210,7 +235,7 @@ function updateCurrentSong(song) {
     // Update Mobile Play Button State
     updatePlayPauseIcon();
 
-    lucide.createIcons();
+    // lucide.createIcons(); // Removed redundant call
 
 
     // Highlight Active Song in List
@@ -223,9 +248,6 @@ function updateCurrentSong(song) {
         }
     });
 
-    // Setup Rename Listener if not already
-    const confirmRenameBtn = document.getElementById('confirm-rename-playlist-btn');
-    if (confirmRenameBtn) confirmRenameBtn.onclick = executeRenamePlaylist;
 }
 
 // --- FAVORITES ---
@@ -241,7 +263,6 @@ async function fetchFavorites() {
                     <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
                     <p class="small mb-0">Login to view favorites</p>
                 </div>`;
-            lucide.createIcons();
         }
         return;
     }
@@ -255,6 +276,7 @@ async function fetchFavorites() {
 }
 
 async function toggleFavorite(songId, btnElement) {
+    const userId = getUserId();
     if (!userId) return alert("Please login first");
 
     // 1. Update State
@@ -265,32 +287,53 @@ async function toggleFavorite(songId, btnElement) {
     // 2. Update ALL instances in DOM
     const allButtons = document.querySelectorAll(`.fav-btn[data-song-id="${songId}"]`);
     allButtons.forEach(btn => {
-        // Animation
         const icon = btn.querySelector('i') || btn.querySelector('svg');
-        if (icon) {
-            icon.classList.add('heart-pulse-active');
-            setTimeout(() => icon.classList.remove('heart-pulse-active'), 400);
-        }
-
-        if (isFav) { // Was fav, now not
+        if (isFav) { // Was fav, now not (Removed)
             btn.classList.remove('text-danger');
             btn.classList.add('text-secondary');
-            btn.innerHTML = '<i data-lucide="heart"></i>';
-        } else { // Was not, now is
+
+            if (icon) {
+                icon.classList.remove('text-danger');
+                icon.classList.add('text-secondary');
+            }
+        } else { // Was not, now is (Added)
             btn.classList.remove('text-secondary');
             btn.classList.add('text-danger');
-            btn.innerHTML = '<i data-lucide="heart" class="fill-danger"></i>';
+
+            if (icon) {
+                icon.classList.remove('text-secondary');
+                icon.classList.add('text-danger');
+            }
         }
     });
 
     // 3. Update Main Player Button if matches
     const mainFavBtn = document.getElementById('favorite-btn');
     if (playlist[currentSongIndex] && playlist[currentSongIndex]._id === songId) {
-        mainFavBtn.innerHTML = `<i data-lucide="heart" class="${!isFav ? 'text-danger fill-danger' : ''}"></i>`;
-        // IMPORTANT: Re-bind click to ensure state is fresh? Not strictly needed if logic uses ID.
+        let icon = mainFavBtn.querySelector('svg') || mainFavBtn.querySelector('i');
+        if (icon) {
+            icon.classList.remove('text-danger', 'text-secondary');
+            icon.classList.add(isFav ? 'text-danger' : 'text-secondary'); // toggle logic inverse handled by isFav update above
+            // Wait, isFav was updated at start: "if (isFav) delete else add".
+            // So if it WAS fav, it is now NOT fav.
+            // isFav variable is the OLD state in the lines above:
+            // const isFav = userFavorites.has(songId);
+            // if (isFav) delete...
+            // So the NEW state is !isFav.
+            // My code in block 2 handled this logic correctly using if(isFav) { remove danger }
+            // Here I need to be careful.
+            // Let's reuse the logic: if (isFav) { it was deleted } else { it was added }
+            if (isFav) { // Removed
+                icon.classList.remove('text-danger');
+                icon.classList.add('text-secondary');
+            } else { // Added
+                icon.classList.remove('text-secondary');
+                icon.classList.add('text-danger');
+            }
+        }
     }
 
-    lucide.createIcons(); // Refresh icons
+    // lucide.createIcons(); // Removed as requested - we are now manipulating SVGs directly
 
     // 4. Backend Sync
     try {
@@ -303,6 +346,7 @@ async function toggleFavorite(songId, btnElement) {
         // Update Favorites Tab list specifically (if visible)
         if (document.getElementById('favorites').classList.contains('active')) {
             renderFavorites();
+            lucide.createIcons();
         }
     } catch (e) {
         console.error("Toggle Fav request failed", e);
@@ -331,7 +375,6 @@ function renderFavorites() {
     }
 
     container.innerHTML = favSongs.map(song => createSongItem(song, 'favorites')).join('');
-    lucide.createIcons();
 
     // SCOPED Listeners
     attachSongPlayListeners(container, favSongs);
@@ -354,7 +397,6 @@ async function fetchPlaylists() {
                     <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
                     <p class="small mb-0">Login to create playlists</p>
                 </div>`;
-            lucide.createIcons();
         }
         return;
     }
@@ -362,6 +404,7 @@ async function fetchPlaylists() {
     if (container) container.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
     try {
+        const userId = getUserId();
         const res = await fetch(`${API_URL}/playlists/${userId}`);
         if (!res.ok) throw new Error("Failed to fetch");
 
@@ -409,7 +452,6 @@ function renderPlaylists() {
                 <p>No playlists yet.</p>
                 <button class="btn btn-sm btn-outline-primary mt-2" onclick="createPlaylistWithModal()">Create one!</button>
             </div>`;
-        lucide.createIcons();
         return;
     }
 
@@ -433,8 +475,6 @@ function renderPlaylists() {
             </div>
         </div>
     `).join('');
-
-    try { lucide.createIcons(); } catch (e) { console.warn("Lucide icons failed", e); }
 }
 
 // Helper to open modal if button is missing/broken
@@ -447,6 +487,8 @@ async function createPlaylist() {
     // Modal logic handled by Bootstrap data-attributes on the button mostly.
     // But we need to handle the "Create" button click inside the modal.
     const nameInput = document.getElementById('playlist-name-input');
+    const userId = getUserId();
+    if (!nameInput) return;
     const name = nameInput.value.trim();
     if (!name || !userId) return;
 
@@ -465,7 +507,7 @@ async function createPlaylist() {
         // Clear input
         nameInput.value = '';
 
-        fetchPlaylists(); // Refresh
+        fetchPlaylists().then(() => lucide.createIcons()); // Refresh
     } catch (e) { alert("Failed to create playlist"); }
 }
 
@@ -492,7 +534,7 @@ async function executeRenamePlaylist() {
         const modal = bootstrap.Modal.getInstance(modalEl);
         modal.hide();
 
-        fetchPlaylists();
+        fetchPlaylists().then(() => lucide.createIcons());
     } catch (e) { alert("Failed to rename playlist"); }
 }
 
@@ -503,7 +545,7 @@ async function deletePlaylist(id) {
         await fetch(`${API_URL}/playlists/${id}`, {
             method: 'DELETE'
         });
-        fetchPlaylists();
+        fetchPlaylists().then(() => lucide.createIcons());
     } catch (e) { alert("Failed to delete playlist"); }
 }
 
@@ -515,7 +557,7 @@ async function addToPlaylist(playlistId, songId) {
             body: JSON.stringify({ songId })
         });
         alert("Added to playlist!");
-        fetchPlaylists();
+        fetchPlaylists().then(() => lucide.createIcons());
     } catch (e) { alert("Failed to add song"); }
 }
 
@@ -532,6 +574,7 @@ async function removeSongFromPlaylist(playlistId, songId) {
             pl.songs = pl.songs.filter(s => (s._id || s) !== songId);
             renderPlaylists(); // Update count
             viewPlaylist(playlistId); // Refresh view
+            lucide.createIcons();
         }
     } catch (e) { alert("Failed to remove song"); }
 }
@@ -550,14 +593,19 @@ function viewPlaylist(playlistId) {
 
     // Pass context 'playlist' and the playlistId
     renderSongs(pl.songs, 'playlist', playlistId);
+    lucide.createIcons();
 
     // Update header or show a "Back to All Songs" button?
     // For now, let's allow filtering back to all.
-    const searchHeader = document.querySelector('#songs-content').parentElement.previousElementSibling; // This is fragile, but let's just use a dedicated button if possible.
+    // Link to header removed to prevent fragility.
+    // const searchHeader = document.querySelector('#songs-content').parentElement.previousElementSibling;
     // Actually, let's just inject a "Showing Playlist: Name (X) [Show All]" banner
     const container = document.getElementById('songs-content');
+    const existingBanner = container.querySelector('.playlist-banner');
+    if (existingBanner) existingBanner.remove();
+
     container.insertAdjacentHTML('afterbegin', `
-        <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded">
+        <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-light rounded playlist-banner">
             <strong>Playlist: ${pl.name}</strong>
             <button class="btn btn-sm btn-outline-secondary" onclick="resetFilter()">Show All Songs</button>
         </div>
@@ -576,7 +624,6 @@ function playPlaylist(playlistId) {
 
 
 // --- GENRES ---
-// --- GENRES ---
 async function fetchGenres() {
     const container = document.getElementById('genre-filters');
     if (!container) return;
@@ -592,22 +639,11 @@ async function fetchGenres() {
     } catch (e) { container.innerHTML = 'Error loading genres'; }
 }
 
-function filterByGenre(genre) {
-    playlist = window.songs.filter(s => s.genre === genre);
-    renderSongs(playlist);
-    updateActiveGenreButton(genre);
-}
-
-function resetFilter() {
-    playlist = window.songs;
-    renderSongs(playlist);
-    updateActiveGenreButton('all');
-}
-
 function updateActiveGenreButton(activeGenre) {
-    document.querySelectorAll('.genre-btn').forEach(btn => {
-        const genre = btn.dataset.genre;
-        if (genre === activeGenre) {
+    const btns = document.querySelectorAll('#genre-filters .genre-btn');
+    btns.forEach(btn => {
+        const isMatch = btn.getAttribute('data-genre') === activeGenre || (activeGenre === 'all' && btn.innerText === 'All');
+        if (isMatch) {
             btn.classList.remove('btn-outline-secondary');
             btn.classList.add('btn-primary');
         } else {
@@ -616,6 +652,25 @@ function updateActiveGenreButton(activeGenre) {
         }
     });
 }
+
+function filterByGenre(genre) {
+    const allSongs = window.songs || [];
+    const filtered = allSongs.filter(s => s.genre === genre);
+    playlist = filtered; // Update current playlist context
+    renderSongs(filtered);
+    lucide.createIcons();
+    updateActiveGenreButton(genre);
+}
+
+function resetFilter() {
+    playlist = window.songs || [];
+    renderSongs(playlist);
+    lucide.createIcons();
+    updateActiveGenreButton('all');
+}
+
+
+
 
 // --- SEARCH & RECENT ---
 function setupEventListeners() {
@@ -649,7 +704,12 @@ function setupEventListeners() {
             const query = searchInput.value.toLowerCase().trim();
 
             if (!query) {
-                container.style.display = 'none';
+                // If it's the main song list (grid search), reset to show all songs
+                if (resultsId === 'songs-content') {
+                    renderSongs(window.songs);
+                } else {
+                    container.style.display = 'none';
+                }
                 return;
             }
 
@@ -658,7 +718,18 @@ function setupEventListeners() {
                 (s.artist && s.artist.toLowerCase().includes(query)) ||
                 (s.genre && s.genre.toLowerCase().includes(query))
             );
-            renderSearchResults(results, resultsId);
+
+            // Special handling for main grid search vs dropdown search
+            if (resultsId === 'songs-content') {
+                renderSongs(results);
+                // Ensure Songs tab is active
+                const songsTab = document.querySelector('#songs-tab');
+                if (songsTab && !songsTab.classList.contains('active')) {
+                    new bootstrap.Tab(songsTab).show();
+                }
+            } else {
+                renderSearchResults(results, resultsId);
+            }
         }
 
         if (searchBtn) searchBtn.onclick = performSearch;
@@ -668,15 +739,20 @@ function setupEventListeners() {
         searchInput.oninput = performSearch;
 
         // Optional: Hide on click outside
-        document.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !container.contains(e.target) && (!searchBtn || !searchBtn.contains(e.target))) {
-                container.style.display = 'none';
-            }
-        });
+        // Optional: Hide on click outside (ONLY for dropdown results, NOT for main content)
+        if (resultsId !== 'songs-content') {
+            document.addEventListener('click', (e) => {
+                if (container && container.style.display !== 'none') {
+                    if (!searchInput.contains(e.target) && !container.contains(e.target) && (!searchBtn || !searchBtn.contains(e.target))) {
+                        container.style.display = 'none';
+                    }
+                }
+            });
+        }
     }
 
-    bindSearch('search-input-desktop', 'search-btn-desktop', 'search-results-desktop');
     bindSearch('search-input-mobile', 'search-btn-mobile', 'search-results-mobile');
+    bindSearch('search-input-grid', 'search-btn-grid', 'search-results-grid');
 
     // Create Playlist Btn
     // --- MOBILE PLAYER SYNC ---
@@ -699,6 +775,24 @@ function setupEventListeners() {
         e.stopPropagation();
         playSong((currentSongIndex + 1) % playlist.length);
     });
+
+    const confirmCreatePlaylistBtn = document.getElementById('confirm-create-playlist-btn');
+    if (confirmCreatePlaylistBtn) {
+        confirmCreatePlaylistBtn.addEventListener('click', createPlaylist);
+    }
+
+    const createPlaylistForm = document.getElementById('create-playlist-form');
+    if (createPlaylistForm) {
+        createPlaylistForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            createPlaylist();
+        });
+    }
+
+    const confirmRenameBtn = document.getElementById('confirm-rename-playlist-btn');
+    if (confirmRenameBtn) {
+        confirmRenameBtn.addEventListener('click', executeRenamePlaylist);
+    }
 }
 
 function updatePlayPauseIcon() {
@@ -728,7 +822,7 @@ function renderSearchResults(results, containerId) {
 }
 
 async function populateRecommendations() {
-    const userId = localStorage.getItem('vibesync_user_id') || 'guest';
+    const userId = getUserId() || 'guest';
     const container = document.getElementById('recommendations');
 
     if (userId === 'guest') {
@@ -738,7 +832,6 @@ async function populateRecommendations() {
                     <i data-lucide="lock" class="mb-2" style="width: 24px; height: 24px; opacity: 0.5;"></i>
                     <p class="small mb-0">Login to view recommendations</p>
                 </div>`;
-            lucide.createIcons();
         }
         return;
     }
@@ -746,11 +839,26 @@ async function populateRecommendations() {
     if (container) container.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
     try {
-        const res = await fetch(`${API_URL}/recommendations/${userId}`);
-        const recommendedSongs = await res.json();
+        const url = `${API_URL}/recommendations/${userId}`;
+        console.log("Fetching Recommendations from:", url);
+        
+        const res = await fetch(url);
+        
+        // Handle both 2xx (success) and 304 (cached) responses
+        if (!res.ok && res.status !== 304) {
+            throw new Error(`API Error: ${res.status} ${res.statusText}`);
+        }
+        
+        // 304 returns empty body, use empty array
+        let recommendedSongs = [];
+        if (res.status !== 304) {
+            recommendedSongs = await res.json();
+        }
+        
+        console.log("Recommendations Response:", recommendedSongs);
 
         if (container) {
-            if (recommendedSongs.length === 0) {
+            if (!recommendedSongs || recommendedSongs.length === 0) {
                 container.innerHTML = '<div class="text-center text-muted p-2">No recommendations yet</div>';
             } else {
                 container.innerHTML = recommendedSongs.map(createSongItem).join('');
@@ -761,8 +869,8 @@ async function populateRecommendations() {
         }
 
     } catch (e) {
-        console.error("Recs Error", e);
-        if (container) container.innerHTML = '<div class="text-center text-danger p-2">Failed to load recommendations</div>';
+        console.error("Recommendations Error:", e.message, e);
+        if (container) container.innerHTML = `<div class="text-center text-danger p-2"><small>Failed to load: ${e.message}</small></div>`;
     }
 }
 
@@ -781,6 +889,7 @@ async function addToRecentlyPlayed(song) {
     }
 
     // Backend Sync
+    const userId = getUserId();
     if (userId) {
         try {
             await fetch(`${API_URL}/users/${userId}/recently-played`, {
@@ -811,24 +920,38 @@ async function fetchRecentlyPlayed() {
     if (container) container.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
 
     try {
-        const res = await fetch(`${API_URL}/users/${userId}/recently-played`);
-        const songs = await res.json();
-        // Backend returns Populate objects, so they match song struct
+        const url = `${API_URL}/users/${currentUserId}/recently-played`;
+        console.log("Fetching Recently Played from:", url);
+        
+        const res = await fetch(url);
+        
+        // Handle both 2xx (success) and 304 (cached) responses
+        if (!res.ok && res.status !== 304) {
+            throw new Error(`API Error: ${res.status} ${res.statusText}`);
+        }
+        
+        // 304 returns empty body, need to use cached version (browser handles this automatically)
+        let songs = [];
+        if (res.status !== 304) {
+            songs = await res.json();
+        }
+        
+        console.log("Recently Played Response:", songs);
         recentlyPlayedSongs = songs;
 
         if (container) {
-            if (recentlyPlayedSongs.length === 0) {
+            if (!songs || songs.length === 0) {
                 container.innerHTML = '<div class="text-center text-muted p-2">No history yet</div>';
             } else {
-                container.innerHTML = recentlyPlayedSongs.map(createSongItem).join('');
+                container.innerHTML = songs.map(createSongItem).join('');
                 lucide.createIcons();
                 // SCOPED Listeners
-                attachSongPlayListeners(container, recentlyPlayedSongs);
+                attachSongPlayListeners(container, songs);
             }
         }
     } catch (e) {
-        console.error("Fetch Recent Error", e);
-        if (container) container.innerHTML = '<div class="text-center text-danger p-2">Failed to load history</div>';
+        console.error("Fetch Recent Error:", e.message, e);
+        if (container) container.innerHTML = `<div class="text-center text-danger p-2"><small>Failed to load history: ${e.message}</small></div>`;
     }
 }
 

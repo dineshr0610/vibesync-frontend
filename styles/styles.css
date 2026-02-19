@@ -382,6 +382,13 @@ main>.container-fluid {
   z-index: 100;
 }
 
+.app-header {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(0, 123, 255, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
 .navbar-brand {
   font-weight: bold !important;
   color: #007bff !important;
@@ -979,25 +986,35 @@ main>.container-fluid {
 /* ============================================
    FOOTER
    ============================================ */
-footer {
+.app-footer {
   margin-top: auto;
   position: relative;
   z-index: 10;
-  background-color: #007bff !important;
-  color: white;
-  padding: var(--sp-lg) var(--sp-md);
+  background: rgba(8, 25, 48, 0.94);
+  color: #e9f2ff;
+  padding: 18px var(--sp-md);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 @media (max-width: 991px) {
-  footer {
+  .app-footer {
     position: relative;
-    margin-bottom: var(--mobile-player-height);
+    margin-bottom: 0;
   }
 }
 
-footer p {
+.app-footer p {
   margin: 0;
-  font-weight: bold;
+  font-weight: 600;
+}
+
+.app-footer-link {
+  color: #9fd1ff;
+  font-weight: 600;
+}
+
+.app-footer-link:hover {
+  color: #ffffff;
 }
 
 /* ============================================
